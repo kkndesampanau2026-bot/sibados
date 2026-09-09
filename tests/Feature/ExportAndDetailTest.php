@@ -152,22 +152,64 @@ class ExportAndDetailTest extends TestCase
 
         $data = array_combine($headings, $mapped);
 
+        // Lima kolom, persis mengikuti format daftar penempatan Koordinator.
+        $this->assertSame(['No', 'Nama Asdos', 'Kelas', 'Mata Kuliah', 'Angkatan'], $headings);
+
         $this->assertSame(1, $data['No']);
-        $this->assertSame(2024, $data['Angkatan']);
+        $this->assertSame('Fajar & Rina', $data['Nama Asdos']);
         $this->assertSame('A', $data['Kelas']);
         $this->assertSame('Pemrograman Mobile', $data['Mata Kuliah']);
-        $this->assertSame('PMB', $data['Kode MK']);
-        $this->assertSame('Fajar & Rina', $data['Pasangan Asdos']);
-        $this->assertSame('Fajar', $data['Asdos 1']);
-        $this->assertSame('Rina', $data['Asdos 2']);
-        $this->assertSame('Ahmad', $data['Ketua Kelas']);
-        $this->assertSame('Aktif', $data['Status']);
-        $this->assertNotNull($data['Waktu Booking']);
+        $this->assertSame(2024, $data['Angkatan']);
+    }
 
-        // NIM & nomor HP tetap berupa teks apa adanya (tanpa awalan apostrof);
-        // value binder yang menjaga agar Excel tidak mengubahnya jadi angka.
-        $this->assertMatchesRegularExpression('/^\d{8}$/', $data['NIM Asdos 1']);
-        $this->assertSame('081200001111', $data['No. HP Ketua Kelas']);
+    /** Baris satu mata kuliah harus berdampingan agar selnya bisa digabung. */
+    public function test_ekspor_mengelompokkan_baris_per_mata_kuliah(): void
+    {
+        ['practicum' => $practicum, 'pair' => $pair, 'leader' => $leader, 'course' => $course] = $this->scenario();
+
+        app(BookingService::class)->book($practicum, $pair, $leader);
+
+        // Mata kuliah kedua, dipesan lebih dulu agar urutan penyimpanan tidak
+        // kebetulan sudah terkelompok.
+        $other = Course::query()->create([
+            'name' => 'Audit Sistem Informasi', 'code' => 'ASI', 'semester' => 'V', 'status' => 'aktif',
+        ]);
+
+        $otherPair = AsdosPair::query()->create([
+            'course_id' => $other->id, 'status' => 'aktif',
+            ...AsdosPair::normalizeMembers(
+                $this->makeAsdos('Budi', $other, '081200002222')->id,
+                $this->makeAsdos('Sari', $other, '081200003333')->id,
+            ),
+        ]);
+
+        foreach (['B', 'C'] as $name) {
+            $class = ClassRoom::query()->create([
+                'class_name' => $name, 'angkatan' => 2024, 'semester' => 'V',
+                'representative_id' => $leader->id,
+            ]);
+
+            app(BookingService::class)->book(
+                $class->practicums()->create(['course_id' => $other->id, 'max_asdos' => 1]),
+                $otherPair,
+                $leader,
+                byAdmin: true,
+            );
+        }
+
+        $export = new BookingsExport('semua');
+
+        $courses = $export->collection()
+            ->map(fn ($booking) => $booking->practicum?->course?->name)
+            ->all();
+
+        // Berdampingan, bukan berselang-seling.
+        $this->assertSame(
+            ['Audit Sistem Informasi', 'Audit Sistem Informasi', 'Pemrograman Mobile'],
+            $courses,
+        );
+
+        $this->assertSame($course->name, $courses[2]);
     }
 
     public function test_ekspor_menghormati_penyaring_status_dan_mata_kuliah(): void
