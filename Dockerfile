@@ -9,17 +9,23 @@ WORKDIR /app
 
 # Lapisan terpisah agar cache composer tidak batal setiap kali kode berubah.
 COPY composer.json composer.lock ./
+
+# --ignore-platform-reqs dipakai karena image composer tidak memuat ekstensi
+# gd/zip yang diminta phpspreadsheet, sementara image runtime memuatnya. Versi
+# paket tetap persis mengikuti composer.lock, dan kelengkapan ekstensi
+# diperiksa ulang pada tahap runtime.
 RUN composer install \
         --no-dev \
         --no-scripts \
         --no-autoloader \
         --prefer-dist \
         --no-interaction \
-        --no-progress
+        --no-progress \
+        --ignore-platform-reqs
 
 COPY . .
 
-RUN composer dump-autoload --optimize --no-dev --classmap-authoritative
+RUN composer dump-autoload --optimize --no-dev --classmap-authoritative --no-interaction
 
 
 # =============================================================================
@@ -68,6 +74,10 @@ RUN apk add --no-cache \
     && apk del .build-deps \
     && rm -rf /tmp/* /var/cache/apk/*
 
+# Gagalkan build sedini mungkin bila ada ekstensi yang tidak terpasang,
+# daripada baru ketahuan sebagai galat 500 ketika aplikasi dipakai.
+RUN php -r 'foreach (["pdo_mysql","zip","gd","mbstring","dom","openssl","fileinfo"] as $ext) { if (!extension_loaded($ext)) { fwrite(STDERR, "Ekstensi PHP hilang: {$ext}\n"); exit(1); } } echo "Ekstensi PHP lengkap.\n";'
+
 WORKDIR /var/www/html
 
 COPY --from=assets /app /var/www/html
@@ -77,7 +87,12 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 # Direktori yang ditulis saat runtime harus dimiliki pengguna php-fpm.
 RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+    && mkdir -p \
+        storage/framework/cache \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs \
+        bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
     && rm -rf node_modules public/hot
 
