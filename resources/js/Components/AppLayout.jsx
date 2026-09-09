@@ -303,7 +303,7 @@ export default function AppLayout({ title, heading, subheading, actions, childre
 
     const widths = {
         default: 'max-w-7xl',
-        narrow: 'max-w-3xl',
+        narrow: 'max-w-1xl',
         wide: 'max-w-none',
     };
 
