@@ -294,6 +294,50 @@ NIM dan nomor HP ditulis sebagai **teks** lewat value binder khusus di
 [BookingsExport.php](app/Exports/BookingsExport.php). Tanpa itu Excel memperlakukannya
 sebagai bilangan dan angka nol di depan (mis. `081300002024`) akan hilang.
 
+## Deployment (Railway)
+
+Aplikasi berjalan di Railway pada proyek **focused-nourishment**:
+
+- **URL** — https://sibados-production.up.railway.app
+- **Layanan `sibados`** — dibangun dari [Dockerfile](Dockerfile), tersambung ke branch
+  `main` repo GitHub ini. Setiap push ke `main` otomatis memicu deploy baru.
+- **Layanan `MySQL`** — image `mysql:8.4` dengan volume `sibados-mysql-data` yang
+  dipasang di `/var/lib/mysql`, sehingga data bertahan melewati redeploy.
+
+### Cara kerja container
+
+[Dockerfile](Dockerfile) memakai tiga tahap: `vendor` (composer), `assets` (build Vite),
+lalu `runtime` (nginx + php-fpm). Saat container start,
+[docker/entrypoint.sh](docker/entrypoint.sh) menunggu database siap, menjalankan migrasi,
+mengisi data awal **hanya bila database masih kosong**, lalu membangun cache
+config/route/view sebelum menyalakan php-fpm dan nginx.
+
+Dua keputusan yang penting dipertahankan:
+
+- **Runtime memakai Debian, bukan Alpine.** Jaringan privat Railway hanya menyediakan
+  alamat IPv6 untuk `*.railway.internal`; resolver musl pada Alpine menanganinya dengan
+  tidak andal sehingga container kadang gagal menghubungi database saat start meski
+  database sehat.
+- **Rute `/` berupa controller, bukan closure.** Rute closure tidak dapat diserialisasi,
+  sehingga `route:cache` — yang dijalankan di produksi — akan gagal.
+
+### Variabel lingkungan
+
+Diatur pada layanan `sibados`. Yang penting: `APP_KEY`, `APP_ENV=production`,
+`APP_DEBUG=false`, `APP_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}`, `LOG_CHANNEL=stderr`,
+`SESSION_SECURE_COOKIE=true`, serta `DB_*` yang menunjuk ke layanan MySQL lewat
+`${{MySQL.RAILWAY_PRIVATE_DOMAIN}}` dan `${{MySQL.MYSQL_PASSWORD}}`.
+
+`ADMIN_NAME`, `ADMIN_EMAIL`, dan `ADMIN_PASSWORD` hanya dipakai **sekali**, saat mengisi
+data awal pada database kosong. Mengubahnya setelah itu tidak mengubah akun yang sudah
+ada — gunakan menu **Pengguna** di dalam aplikasi.
+
+### Data awal di produksi
+
+Seeder demo (Asdos, pasangan, ketua kelas berkata sandi seragam) **tidak pernah
+dijalankan di produksi**. Yang terisi hanya akun Koordinator, 7 mata kuliah praktikum,
+9 rombel, dan 21 praktikum. Asdos, pasangan, dan ketua kelas diisi sendiri lewat aplikasi.
+
 ## Pengujian
 
 ```bash
