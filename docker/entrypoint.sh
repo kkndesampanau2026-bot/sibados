@@ -10,20 +10,34 @@ export PORT="${PORT:-8080}"
 envsubst '${PORT}' < /etc/nginx/nginx.template.conf > /etc/nginx/nginx.conf
 echo "[sibados] nginx akan mendengarkan port ${PORT}"
 
-# Database privat Railway kadang belum siap tepat saat container hidup.
+echo "[sibados] Target database: ${DB_CONNECTION}://${DB_USERNAME}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}"
+
+# Jaringan privat Railway butuh beberapa saat untuk siap setelah container
+# hidup, jadi koneksi dicoba ulang. Galat aslinya ikut dicetak supaya kegagalan
+# yang sesungguhnya tidak tersamar oleh loop ini.
 echo "[sibados] Menunggu database siap…"
 attempt=1
-until php artisan db:show --quiet > /dev/null 2>&1; do
-    if [ "$attempt" -ge 30 ]; then
-        echo "[sibados] Database tidak dapat dihubungi setelah 30 percobaan." >&2
+max_attempts=60
+
+until php artisan db:show --quiet > /tmp/db-check.log 2>&1; do
+    if [ "$attempt" -ge "$max_attempts" ]; then
+        echo "[sibados] Database tidak dapat dihubungi setelah ${max_attempts} percobaan." >&2
+        echo "[sibados] Galat terakhir:" >&2
+        cat /tmp/db-check.log >&2
         exit 1
     fi
 
-    echo "[sibados]   percobaan ${attempt}/30…"
+    # Cetak galat sesekali agar penyebabnya terlihat tanpa membanjiri log.
+    if [ "$((attempt % 5))" -eq 1 ]; then
+        echo "[sibados]   percobaan ${attempt}/${max_attempts} — galat saat ini:"
+        head -c 600 /tmp/db-check.log || true
+    fi
+
     attempt=$((attempt + 1))
     sleep 2
 done
-echo "[sibados] Database terhubung."
+
+echo "[sibados] Database terhubung setelah ${attempt} percobaan."
 
 php artisan migrate --force --no-interaction
 
