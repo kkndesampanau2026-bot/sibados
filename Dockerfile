@@ -48,31 +48,30 @@ RUN npm run build
 # =============================================================================
 # Tahap 3 — Runtime
 # =============================================================================
-FROM php:8.3-fpm-alpine AS runtime
+# Sengaja memakai varian Debian (glibc), BUKAN Alpine. Jaringan privat Railway
+# hanya menyediakan alamat IPv6 untuk *.railway.internal, dan resolver musl di
+# Alpine menanganinya dengan tidak andal — gejalanya container gagal menghubungi
+# database saat start meski database sehat.
+FROM php:8.3-fpm-bookworm AS runtime
 
-# nginx melayani permintaan, php-fpm mengeksekusi PHP, gettext menyediakan
+# nginx melayani permintaan, php-fpm mengeksekusi PHP, gettext-base menyediakan
 # envsubst untuk menyisipkan $PORT dari Railway ke konfigurasi nginx.
-RUN apk add --no-cache \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
         nginx \
-        gettext \
-        libzip \
-        libpng \
-        libjpeg-turbo \
-        freetype \
-    && apk add --no-cache --virtual .build-deps \
-        $PHPIZE_DEPS \
+        gettext-base \
         libzip-dev \
         libpng-dev \
-        libjpeg-turbo-dev \
-        freetype-dev \
+        libjpeg62-turbo-dev \
+        libfreetype6-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql \
         zip \
         gd \
         opcache \
-    && apk del .build-deps \
-    && rm -rf /tmp/* /var/cache/apk/*
+    && apt-get purge -y --auto-remove \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
 
 # Gagalkan build sedini mungkin bila ada ekstensi yang tidak terpasang,
 # daripada baru ketahuan sebagai galat 500 ketika aplikasi dipakai.
