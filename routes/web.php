@@ -3,9 +3,9 @@
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\Asdos\DashboardController as AsdosDashboard;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Perwakilan\BookingController as PerwakilanBooking;
 use App\Http\Controllers\ProfileController;
-use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,19 +25,7 @@ Route::post('/logout', [LoginController::class, 'destroy'])
     ->name('logout');
 
 /** Mengarahkan setiap peran ke dashboard-nya masing-masing. */
-Route::get('/', function () {
-    $user = auth()->user();
-
-    if (! $user) {
-        return redirect()->route('login');
-    }
-
-    return redirect()->route(match ($user->role) {
-        User::ROLE_ADMIN => 'admin.dashboard',
-        User::ROLE_ASDOS => 'asdos.dashboard',
-        default => 'perwakilan.dashboard',
-    });
-})->name('dashboard');
+Route::get('/', HomeController::class)->name('dashboard');
 
 /*
 |--------------------------------------------------------------------------

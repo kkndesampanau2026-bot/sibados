@@ -11,11 +11,13 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // Kredensial admin dibaca dari config/sibados.php agar deployment
+        // produksi tidak memakai kata sandi bawaan yang mudah ditebak.
         User::query()->firstOrCreate(
-            ['email' => 'admin@sibados.test'],
+            ['email' => config('sibados.admin.email')],
             [
-                'name' => 'Koordinator Asdos',
-                'password' => 'password',
+                'name' => config('sibados.admin.name'),
+                'password' => config('sibados.admin.password'),
                 'role' => User::ROLE_ADMIN,
                 'is_active' => true,
             ],
@@ -25,11 +27,11 @@ class DatabaseSeeder extends Seeder
             Setting::query()->firstOrCreate(['key' => $key], ['value' => $value]);
         }
 
-        $this->call([
-            CourseSeeder::class,
-            // Data contoh (tim, Asdos, perwakilan). Hapus baris ini untuk
-            // instalasi bersih tanpa data demo.
-            DemoSeeder::class,
-        ]);
+        $this->call(CourseSeeder::class);
+
+        // Akun demo berkata sandi seragam; jangan pernah dibuat di produksi.
+        if (! app()->environment('production')) {
+            $this->call(DemoSeeder::class);
+        }
     }
 }

@@ -23,6 +23,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => EnsureUserRole::class,
         ]);
+
+        // Railway menutup aplikasi di balik proxy TLS. Tanpa ini Laravel
+        // mengira permintaan berjalan di HTTP, sehingga URL yang dihasilkan
+        // salah skema dan cookie sesi bertanda secure tidak pernah terkirim.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
